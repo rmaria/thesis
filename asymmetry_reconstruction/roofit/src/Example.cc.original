@@ -1,0 +1,277 @@
+#include "Example.hh"
+#include <TStyle.h>
+#include <TCanvas.h>
+#include <TROOT.h>
+#include <TH1.h>
+#include <TH2.h>
+#include <TLegend.h>
+#include <TTree.h>
+#include <TLeaf.h>
+#include <TMath.h>
+#include <TLorentzVector.h>
+#include <TVector2.h>
+#include <TVector3.h>
+#include <TRotation.h>
+#include <TLorentzRotation.h>
+#include <TLine.h>
+#include <TArrow.h>
+#include <TSystem.h>
+#include <TF1.h>
+#include <TApplication.h>
+#include <TRandom.h>
+#include <TLatex.h>
+
+//RooFit
+#include <RooRealVar.h>
+#include <RooGaussModel.h>
+#include <RooBDecay.h>
+#include <RooFormulaVar.h>
+#include <RooCategory.h>
+#include <RooAddPdf.h>
+#include <RooSimultaneous.h>
+#include <RooGlobalFunc.h>
+#include <RooPlot.h>
+#include <RooFitResult.h>
+
+//C++, C
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdexcept>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <string>
+#include <math.h>
+#include <iomanip>
+#include <assert.h>
+
+using namespace std;
+
+//============================================================================
+void Example(double tmean,
+	     double DeltaGammaTau,
+	     double DeltaM,
+	     double Mod_lambda_f,
+	     double Phi_lambda_f,
+	     double ResModel_Bias,
+	     double ResModel_Width,
+	     double Omega,
+	     double DeltaOmega,
+	     int Nevents,
+	     double GenAsym,
+	     int seed,
+	     const char* OutputFile)
+{
+
+  double DegToRad = TMath::Pi()/180.0;
+
+  //The Time variable:
+  RooRealVar t("t","Decay time",0.0,100.0,"ps");
+
+  //Resolution Model parameters:
+  Double_t TheBias = ResModel_Bias;
+  Double_t TheWidth = ResModel_Width;
+  RooRealVar bias("bias",  "Resolution model Bias",TheBias,-1000.0,1000.0,"ps");
+  RooRealVar sigma("sigma","Resolution model #sigma",TheWidth,0.0,1000.0,"ps");
+  RooGaussModel ResModel("ResModel","Gaussian Resolution Model",t,bias,sigma);
+
+  //Truth PDF parameters:
+  Double_t Tau = tmean;
+  Double_t dgamma = DeltaGammaTau/tmean;
+  Double_t DM     = DeltaM;
+  Double_t ModLf  = Mod_lambda_f;
+  Double_t PhiLf  = Phi_lambda_f;
+
+  RooRealVar tau("tau","Average Decay time",Tau,0.0,1000.0,"ps");
+  RooRealVar DGamma("DGamma","#Delta#Gamma",dgamma,0.0,1000.0,"ps^{-1}");
+  RooRealVar dm("dm","#DeltaM",DM,0.0,1000.0,"ps^{-1}");
+  RooRealVar ModlambdaF("ModlambdaF","#lambda_{f}",ModLf,0.0,1000.0,"");
+  RooRealVar PhilambdaF("PhilambdaF","#lambda_{f}",PhiLf*DegToRad,0.0*DegToRad,360.0*DegToRad,"degrees");
+
+  //D0->f pdf:
+  //Coefficient of Cosh
+  RooRealVar f0_D0("f0_D0","Cosh coefficient (D^{0})",1.0);
+  RooRealVar f1_D0("f1_D0","f1",0.0,-1.0,1.0,"");
+  RooRealVar f2_D0("f2_D0","f2",0.0,-1.0,1.0,"");
+  RooRealVar f3_D0("f3_D0","f3",0.0,-1.0,1.0,"");
+#if 0
+  RooFormulaVar f1_D0("f1_D0","-2.0*TMath::Cos(PhilambdaF)/(1.0 + pow(ModlambdaF,2))",
+		      RooArgList(PhilambdaF,ModlambdaF));
+  //Coefficient of Cos
+  RooFormulaVar f2_D0("f2_D0","(1.0 - pow(ModlambdaF,2))/(1.0 + pow(ModlambdaF,2))",
+		      RooArgList(ModlambdaF));
+  //Coefficient of Sin
+  RooFormulaVar f3_D0("f3_D0","-2.0*TMath::Sin(PhilambdaF)/(1.0 + pow(ModlambdaF,2))",
+		      RooArgList(PhilambdaF,ModlambdaF));
+#endif
+  RooBDecay D0Pdf("D0Pdf","#Gamma(D^{0} #rightarrow f) pdf",
+		  t,
+		  tau,DGamma,
+		  f0_D0,f1_D0,f2_D0,f3_D0,
+		  dm,
+		  ResModel,
+		  RooBDecay::SingleSided);
+  f0_D0.setConstant(true);
+
+#if 0
+  //D0bar->f pdf:
+  //Coefficient of Cosh
+  RooRealVar f0_D0bar("f0_D0bar","Cosh coefficient (#bar{D}^{0})",1.0);
+  //Coefficiency of Sinh
+  RooFormulaVar f1_D0bar("f1_D0bar","-2.0*TMath::Cos(PhilambdaF)/(1.0 + pow(ModlambdaF,2))",
+			 RooArgList(PhilambdaF,ModlambdaF));
+  //Coefficient of Cos
+  RooFormulaVar f2_D0bar("f2_D0bar","-(1.0 - pow(ModlambdaF,2))/(1.0 + pow(ModlambdaF,2))",
+			 RooArgList(ModlambdaF));
+  //Coefficient of Sin
+  RooFormulaVar f3_D0bar("f3_D0bar","2.0*TMath::Sin(PhilambdaF)/(1.0 + pow(ModlambdaF,2))",
+			 RooArgList(PhilambdaF,ModlambdaF));
+  RooBDecay D0barPdf("D0barPdf","#Gamma(#bar{D}^{0} #rightarrow f) pdf",
+		     t,
+		     tau,DGamma,
+		     f0_D0bar,f1_D0bar,f2_D0bar,f3_D0bar,
+		     dm,
+		     ResModel,
+		     RooBDecay::SingleSided);
+  f0_D0bar.setConstant(true);
+
+
+  //Inclusion of mistagging effects:
+  Double_t TheOmega      = Omega;
+  Double_t TheDeltaOmega = DeltaOmega;
+  RooRealVar omega("omega","Average mistag probability",TheOmega,0.0,1.0,"");
+  RooRealVar Domega("Domega","mistag probability difference",TheDeltaOmega,-1.0,1.0,"");
+  RooFormulaVar omega_D0("omega_D0","omega + 0.5*Domega",
+			 RooArgList(omega,Domega));
+  RooFormulaVar omega_D0bar("omega_D0bar","omega - 0.5*Domega",
+			    RooArgList(omega,Domega));
+
+
+  //D0-tagged -> f pdf:
+  RooAddPdf D0TaggedPdf("D0TaggedPdf",
+			"D^{0}(tagged) #rightarrow f) pdf",
+			RooArgList(D0Pdf,D0barPdf),
+			RooArgList(omega_D0));
+
+  //D0-tagged -> f pdf:
+  RooAddPdf D0barTaggedPdf("D0barTaggedPdf",
+			   "#bar{D}^{0}(tagged) #rightarrow f) pdf",
+			   RooArgList(D0barPdf,D0Pdf),
+			   RooArgList(omega_D0bar));
+
+  //D0 flavor:
+  RooCategory D0flav("D0flav","D0 flavour");
+  D0flav.defineType("D0",    1);
+  D0flav.defineType("D0bar",-1);
+
+  RooSimultaneous FullDDecayPdf("FullDDecayPdf",
+				"Full D^{0}/#bar{D}^{0} #rightarrow f decay pdf",
+				D0flav);
+  FullDDecayPdf.addPdf(D0TaggedPdf,   "D0");
+  FullDDecayPdf.addPdf(D0barTaggedPdf,"D0bar");
+#endif
+
+  TRandom r(seed);
+  double N_D0_gen    = 0.5*Nevents*(1.0 + GenAsym);
+  double N_D0bar_gen = 0.5*Nevents*(1.0 - GenAsym);
+
+  cout << endl;
+  cout << "Generating " << Nevents << " (N_D0 + N_D0bar) events, with asymmetry " 
+       << GenAsym << " (N_D0 - N_D0bar)/(N_D0 + N_D0bar)" << endl;
+  cout << "Generating " << N_D0_gen    << " D0    events" << endl;
+  cout << "Generating " << N_D0bar_gen << " D0bar events" << endl;
+  cout << endl;
+
+  int N_D0    = r.Poisson(N_D0_gen);
+  int N_D0bar = r.Poisson(N_D0bar_gen);
+
+  cout << endl;
+  cout << "N D0    = " << N_D0 << endl;
+  cout << "N D0bar = " << N_D0bar << endl;
+  cout << "N       = " << N_D0 + N_D0bar << endl;
+  cout << endl;
+
+  RooDataSet* data_D0    = D0Pdf.generate(RooArgSet(t),N_D0);
+  bias.setConstant(true);
+  sigma.setConstant(true);
+  DGamma.setConstant(true);
+  dm.setConstant(true);
+  ModlambdaF.setConstant(true);
+  PhilambdaF.setConstant(true);
+  //omega.setConstant(true);
+  //Domega.setConstant(true);
+  RooFitResult* res = D0Pdf.fitTo(*data_D0,RooFit::Save());  
+
+#if 0
+  //Generation of D0 events:
+  RooDataSet* data_D0    = D0TaggedPdf.generate(RooArgSet(t),N_D0);
+  //Generation of D0 events:
+  RooDataSet* data_D0bar = D0barTaggedPdf.generate(RooArgSet(t),N_D0bar);
+  //Combine Samples:
+  RooDataSet combData("combData","combined D0 and D0bar data",
+		      t,
+		      RooFit::Index(D0flav),
+		      RooFit::Import("D0",   *data_D0),
+		      RooFit::Import("D0bar",*data_D0bar));
+  combData.Print("v");
+
+  //defining the variables which are constant in Fit:
+  bias.setConstant(true);
+  sigma.setConstant(true);
+  DGamma.setConstant(true);
+  dm.setConstant(true);
+  ModlambdaF.setConstant(true);
+  PhilambdaF.setConstant(true);
+  omega.setConstant(true);
+  Domega.setConstant(true);
+  //RooFitResult* res = FullDDecayPdf.fitTo(combData,RooFit::Save());
+#endif
+  
+  TString EPSName = TString(OutputFile) + TString(".eps");
+  TString EPSNameO = EPSName + TString("[");
+  TString EPSNameC = EPSName + TString("]");
+
+  TCanvas* c1 = new TCanvas("c1","c1");
+  c1->SetFillColor(10);
+  c1->SetFrameFillColor(10);
+  c1->SetTickx(1);
+  c1->SetTicky(1);
+  c1->SetLeftMargin(0.15);
+  c1->SetBottomMargin(0.15);
+  c1->SetRightMargin(0.20);
+
+  c1->Print(EPSNameO.Data());
+#if 0
+  c1->Clear();
+  RooPlot *timeFrame_1 = t.frame(t.getMin(),t.getMax(),100);
+  timeFrame_1->SetTitle("Decay time distribution");
+  data_D0->plotOn(timeFrame_1,   RooFit::LineColor(kBlue),RooFit::MarkerColor(kBlue));
+  data_D0bar->plotOn(timeFrame_1,RooFit::LineColor(kRed), RooFit::MarkerColor(kRed));
+  timeFrame_1->Draw();
+  c1->Print(EPSName.Data());
+
+  c1->Clear();
+  RooPlot *timeFrame_2 = t.frame(t.getMin(),t.getMax(),100);
+  timeFrame_2->SetTitle("Decay time distribution");
+  combData.plotOn(timeFrame_2,RooFit::LineColor(kBlue),RooFit::MarkerColor(kBlue));
+  timeFrame_2->Draw();
+  c1->Print(EPSName.Data());
+
+  c1->Clear();
+  RooPlot *timeFrame_3 = t.frame(t.getMin(),t.getMax(),100);
+  timeFrame_3->SetTitle("Decay time distribution");
+  combData.plotOn(timeFrame_3,RooFit::Cut("D0flav==D0flav::D0"),RooFit::LineColor(kBlue),RooFit::MarkerColor(kBlue));
+  FullDDecayPdf.plotOn(timeFrame_3,RooFit::Slice(D0flav,"D0"),
+		       RooFit::ProjWData(D0flav,combData),
+		       RooFit::LineColor(kGreen+2));
+  timeFrame_3->Draw();
+  c1->Print(EPSName.Data());
+#endif
+  c1->Print(EPSNameC.Data());
+
+  return;
+
+}
+//============================================================================
+
+

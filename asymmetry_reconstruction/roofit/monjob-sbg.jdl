@@ -1,0 +1,8 @@
+
+Executable    = "/bin/sh";
+Arguments     = "Run_example.sh";
+Stdoutput     = "stdout";
+StdError      = "stderror";
+InputSandbox  = {"Run_example.sh","AppExample"}; 
+OutputSandbox = {"stdout","Ntuple_0psc.root","stderror"};
+Requirements=other.GlueCEUniqueID=="sbgce2.in2p3.fr:8443/cream-pbs-vo.grand_est.fr";
