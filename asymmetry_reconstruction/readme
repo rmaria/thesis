@@ -1,1 +1,3 @@
-Measurement of a time-dependent CP violation in D^0 -> h^+h^-
+# Measurement of a time-dependent CP violation in D^0 -> h^+h^-
+
+3 methods: 2 binned MINUIT fit and Chi2 fit and 1 unbinned based on RooFit
